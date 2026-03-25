@@ -1,0 +1,17 @@
+packages:
+  "@dnd-kit/core": "Drag and drop core functionality for kanban board"
+  "@dnd-kit/sortable": "Sortable lists for kanban columns"
+  "@dnd-kit/utilities": "Utilities for dnd-kit"
+  "date-fns": "For formatting relative dates like '2 days ago'"
+  "framer-motion": "For polished layout animations and entry effects"
+  "lucide-react": "For UI icons"
+
+images:
+  - path: "artifacts/kanban-board/public/images/kanban-bg.png"
+    description: "A dark, moody, professional abstract background with subtle deep blue and purple gradient meshes, technical developer tool aesthetic, very dark"
+    aspect_ratio: "16:9"
+
+notes:
+  - Assumes @workspace/api-client-react is available for all API hooks
+  - Using localStorage to persist the selected repository
+  - Using dnd-kit for accessible and robust drag-and-drop
