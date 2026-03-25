@@ -1,8 +1,14 @@
 node_modules/
 dist/
 .cache/
+
 *.map
 *.log
+*.tsbuildinfo
+
 .env
 .env.local
 .env.*.local
+
+.DS_Store
+Thumbs.db

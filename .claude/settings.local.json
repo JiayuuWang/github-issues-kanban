@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls:*)",
+      "Bash(find /c/Users/23952/Desktop/github-issues-kanban -path */node_modules -prune -o -path */.git -prune -o -type d -name lib -print)",
+      "Bash(ls:*)",
+      "Bash(git mv:*)",
+      "Bash(git rm:*)"
+    ]
+  }
+}
