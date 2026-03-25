@@ -24,6 +24,13 @@ export function isAwaitingFeedback(issue: GitHubIssue): boolean {
 }
 
 /**
+ * Read-only column mapping: just open / closed.
+ */
+export function getReadOnlyColumnForIssue(issue: GitHubIssue): 'open' | 'closed' {
+  return issue.state === 'closed' ? 'closed' : 'open';
+}
+
+/**
  * Determine the default kanban column for a GitHub issue.
  *
  * Mapping rules:

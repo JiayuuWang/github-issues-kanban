@@ -314,3 +314,53 @@
     inset: -1px;
   }
 }
+
+/* Issue Preview Popover body styles */
+.preview-body {
+  font-size: 12px;
+  line-height: 1.65;
+  color: #a1a1aa;
+}
+.preview-body strong,
+.preview-body .md-h {
+  color: #d4d4d8;
+  display: block;
+  margin-bottom: 4px;
+}
+.preview-body em {
+  color: #a1a1aa;
+  font-style: italic;
+}
+.preview-body .md-pre {
+  background: #09090b;
+  border: 1px solid #27272a;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-family: monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  color: #71717a;
+  margin: 6px 0;
+}
+.preview-body .md-code {
+  background: #18181b;
+  border: 1px solid #27272a;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: monospace;
+  color: #d4d4d8;
+}
+.preview-body .md-link {
+  color: #6366f1;
+  text-decoration: underline;
+}
+.preview-body li {
+  list-style: disc;
+  margin-left: 16px;
+  color: #a1a1aa;
+}
+.preview-body br {
+  line-height: 1.2;
+}
