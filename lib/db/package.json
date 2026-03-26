@@ -10,14 +10,16 @@
     "./schema": "./src/schema.ts"
   },
   "scripts": {
-    "push": "drizzle-kit push"
+    "push": "dotenv -e ../../.env -- drizzle-kit push"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
-    "@neondatabase/serverless": "^0.10.0"
+    "pg": "^8.20.0"
   },
   "devDependencies": {
-    "drizzle-kit": "^0.30.0",
-    "@types/node": "catalog:"
+    "@types/node": "catalog:",
+    "@types/pg": "^8.20.0",
+    "dotenv-cli": "^11.0.0",
+    "drizzle-kit": "^0.30.0"
   }
 }

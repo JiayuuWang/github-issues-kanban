@@ -11,7 +11,17 @@
       "Bash(pnpm --filter @workspace/server run typecheck)",
       "Bash(pnpm --filter @workspace/client run typecheck)",
       "Bash(pnpm --filter @workspace/server run build)",
-      "Bash(pnpm --filter @workspace/client run build)"
+      "Bash(pnpm --filter @workspace/client run build)",
+      "Bash(pnpm --filter @workspace/server add -D cross-env)",
+      "Bash(pnpm --filter @workspace/db add -D dotenv-cli)",
+      "Bash(pnpm --filter @workspace/db run push)",
+      "Bash(pnpm --filter @workspace/db remove @neondatabase/serverless)",
+      "Bash(pnpm --filter @workspace/db add pg)",
+      "Bash(pnpm --filter @workspace/db add -D @types/pg)",
+      "Bash(pnpm --filter @workspace/server add -D dotenv-cli)",
+      "Bash(curl -s http://localhost:3001/api/github/rate-limit)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill:*)"
     ]
   }
 }
