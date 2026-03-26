@@ -5,7 +5,13 @@
       "Bash(find /c/Users/23952/Desktop/github-issues-kanban -path */node_modules -prune -o -path */.git -prune -o -type d -name lib -print)",
       "Bash(ls:*)",
       "Bash(git mv:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm --filter @workspace/server run typecheck)",
+      "Bash(pnpm --filter @workspace/client run typecheck)",
+      "Bash(pnpm --filter @workspace/server run build)",
+      "Bash(pnpm --filter @workspace/client run build)"
     ]
   }
 }

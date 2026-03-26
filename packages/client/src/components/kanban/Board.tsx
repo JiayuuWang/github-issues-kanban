@@ -143,7 +143,7 @@ export function Board({
   const { toast } = useToast();
   const isReadOnly = mode === 'readonly';
   const COLUMNS = isReadOnly ? RO_COLUMNS : RW_COLUMNS;
-  const emptyState = isReadOnly
+  const emptyState: ColumnsState = isReadOnly
     ? { open: [], closed: [] }
     : { todo: [], 'in-progress': [], done: [] };
 
