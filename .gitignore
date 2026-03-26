@@ -10,5 +10,8 @@ dist/
 .env.local
 .env.*.local
 
+.claude/
+CLAUDE.md
+
 .DS_Store
 Thumbs.db
