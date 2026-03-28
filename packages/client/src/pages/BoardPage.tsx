@@ -97,7 +97,6 @@ export function BoardPage() {
 
   // Fetch trending + topics for treemap mode
   useEffect(() => {
-    if (!isValid) return;
     const fetchExtra = async () => {
       try {
         const [tRes, hRes] = await Promise.all([
@@ -109,7 +108,7 @@ export function BoardPage() {
       } catch { /* silent */ }
     };
     fetchExtra();
-  }, [isValid]);
+  }, []);
 
   const fetchPage = useCallback(async (pg: number, append: boolean, signal: AbortSignal) => {
     if (!owner || !repo) return;
@@ -394,7 +393,7 @@ export function BoardPage() {
             /* --- Board: Column Mode vs Treemap Mode --- */
             viewMode === 'treemap' ? (
               <motion.div key="treemap" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="flex-1 overflow-hidden">
+                style={{ flex: '1 1 0%', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <TreemapView
                   issues={issues}
                   trendingRepos={trendingRepos}
