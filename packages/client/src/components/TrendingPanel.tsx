@@ -64,16 +64,13 @@ export function TrendingPanel({ onSelectRepo, token }: TrendingPanelProps) {
     setIsLoading(true);
     setError(null);
     try {
-      const headers: Record<string, string> = {};
-      if (token) headers['X-GitHub-Token'] = token;
-
       if (t === 'repos') {
-        const res = await fetch(`${BASE_URL}/api/github/trending?since=${p}`, { headers });
+        const res = await fetch(`${BASE_URL}/api/github/trending?since=${p}`);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
         setRepos(data);
       } else {
-        const res = await fetch(`${BASE_URL}/api/github/trending-developers?since=${p}`, { headers });
+        const res = await fetch(`${BASE_URL}/api/github/trending-developers?since=${p}`);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
         setDevelopers(data);
@@ -83,7 +80,7 @@ export function TrendingPanel({ onSelectRepo, token }: TrendingPanelProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     fetchTrending(period, tab);

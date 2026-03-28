@@ -7,6 +7,7 @@ import { RepoForm } from '@/components/RepoForm';
 import { RateLimitBadge } from '@/components/RateLimitBadge';
 import { Board, type BoardMode } from '@/components/kanban/Board';
 import { TrendingPanel } from '@/components/TrendingPanel';
+import { TopicCloudPanel } from '@/components/TopicCloudPanel';
 import { GitHubAuthModal } from '@/components/GitHubAuthModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -158,19 +159,13 @@ export function BoardPage() {
 
   const isRateLimitError = loadError?.status === 429;
   const isNotFoundError = loadError?.status === 404;
-
-  // Board is visible when we have issues or just finished loading
   const showBoard = isValid && !isLoading && !loadError;
-  const isReadOnly = mode === 'readonly';
-
-  // Show trending panel: on empty state always, on board state only in readonly mode
-  const showTrendingSidebar = isReadOnly && !trendingCollapsed;
+  const showTrendingSidebar = !trendingCollapsed;
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-[#111] text-zinc-200">
       {/* Top Bar */}
       <header className="shrink-0 w-full border-b border-zinc-900 px-5 h-12 flex items-center justify-between gap-4">
-        {/* Logo */}
         <div className="flex items-center gap-2.5 shrink-0">
           <GitBranch className="w-4 h-4 text-zinc-400" />
           <span className="text-sm font-mono font-medium text-zinc-200 tracking-tight">kanban</span>
@@ -178,14 +173,11 @@ export function BoardPage() {
           <span className="text-xs font-mono text-zinc-500">github-issues</span>
         </div>
 
-        {/* Repo Input */}
         <div className="flex-1 flex justify-center max-w-xl">
           <RepoForm currentRepo={repoStr} onSetRepo={setRepoStr} isLoading={isLoading} />
         </div>
 
-        {/* Right side */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Mode indicator */}
           {isValid && !isLoading && (
             <div className={`hidden sm:flex items-center gap-1 text-[10px] font-mono px-2 py-1 rounded-sm border ${
               mode === 'readwrite'
@@ -198,8 +190,8 @@ export function BoardPage() {
 
           <RateLimitBadge />
 
-          {/* Trending toggle — only visible when board is shown in readonly */}
-          {showBoard && isReadOnly && (
+          {/* Trending toggle — visible whenever board is shown */}
+          {showBoard && (
             <button
               onClick={toggleTrending}
               className="hidden lg:flex w-7 h-7 items-center justify-center rounded-sm border border-zinc-800 hover:border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
@@ -209,7 +201,6 @@ export function BoardPage() {
             </button>
           )}
 
-          {/* Refresh */}
           <button
             onClick={handleRefresh}
             disabled={!isValid || isLoading}
@@ -219,10 +210,8 @@ export function BoardPage() {
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
 
-          {/* GitHub Auth */}
           {user ? (
             <div className="flex items-center gap-1.5">
-              {/* User repos dropdown */}
               <div className="relative" ref={reposDropdownRef}>
                 <button
                   onClick={() => setShowReposDropdown((v) => !v)}
@@ -309,22 +298,26 @@ export function BoardPage() {
               className="flex-1 flex overflow-hidden"
             >
               {/* Left: hero */}
-              <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
+              <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
                 <Github className="w-8 h-8 text-zinc-700 mb-4" />
                 <h2 className="text-sm font-mono font-medium text-zinc-400 mb-2">Connect a repository</h2>
-                <p className="text-xs font-mono text-zinc-600 max-w-xs">
+                <p className="text-xs font-mono text-zinc-600 max-w-xs mb-6">
                   Enter a GitHub repository in the format{' '}
                   <span className="text-zinc-400">owner/repo</span> above to load its issues.
                 </p>
                 {!user && (
                   <button
                     onClick={() => setShowAuthModal(true)}
-                    className="mt-6 flex items-center gap-2 px-4 py-2 rounded-sm border border-zinc-700 hover:border-zinc-500 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-mono"
+                    className="mb-8 flex items-center gap-2 px-4 py-2 rounded-sm border border-zinc-700 hover:border-zinc-500 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-mono"
                   >
                     <Github className="w-3.5 h-3.5" />
                     Sign in to browse your repositories
                   </button>
                 )}
+                {/* Topic cloud on empty state */}
+                <div className="w-full max-w-lg border border-zinc-800/60 rounded-sm bg-zinc-900/30">
+                  <TopicCloudPanel />
+                </div>
               </div>
               {/* Right: trending */}
               <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[340px] shrink-0 overflow-hidden">
@@ -347,7 +340,6 @@ export function BoardPage() {
                   </div>
                 ))}
               </div>
-              {/* Loading trending placeholder */}
               <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[340px] shrink-0">
                 <div className="h-6 w-24 rounded-sm bg-zinc-900 animate-pulse mb-3" />
                 <div className="space-y-2 mt-3">
@@ -377,46 +369,52 @@ export function BoardPage() {
           ) : showBoard ? (
             <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex-1 overflow-hidden flex">
-              {/* Board area — expands to fill when trending is collapsed */}
-              <div className={`overflow-hidden p-5 flex flex-col min-w-0 transition-all duration-300 ${
-                showTrendingSidebar ? 'flex-1' : 'flex-1 items-center'
-              }`}>
-                <div className={`w-full h-full transition-all duration-300 ${
-                  !showTrendingSidebar && isReadOnly ? 'max-w-5xl mx-auto' : ''
+              {/* Board + Topic Cloud area */}
+              <div className="flex-1 overflow-hidden flex flex-col min-w-0">
+                {/* Board */}
+                <div className={`flex-1 overflow-hidden p-5 pb-0 flex flex-col min-w-0 transition-all duration-300 ${
+                  !showTrendingSidebar ? 'items-center' : ''
                 }`}>
-                  <Board
-                    repoKey={repoStr}
-                    issues={issues}
-                    owner={owner}
-                    repo={repo}
-                    mode={mode}
-                    token={token}
-                    totalFromGitHub={totalFromGitHub}
-                    onLoadMore={handleLoadMore}
-                    isLoadingMore={isLoadingMore}
-                    expanded={isReadOnly && trendingCollapsed}
-                  />
+                  <div className={`w-full h-full transition-all duration-300 ${
+                    !showTrendingSidebar ? 'max-w-5xl mx-auto' : ''
+                  }`}>
+                    <Board
+                      repoKey={repoStr}
+                      issues={issues}
+                      owner={owner}
+                      repo={repo}
+                      mode={mode}
+                      token={token}
+                      totalFromGitHub={totalFromGitHub}
+                      onLoadMore={handleLoadMore}
+                      isLoadingMore={isLoadingMore}
+                      expanded={trendingCollapsed}
+                    />
+                  </div>
+                </div>
+
+                {/* Topic Cloud — sits below the board */}
+                <div className="shrink-0 mx-5 mb-3 border border-zinc-800/60 rounded-sm bg-zinc-900/20">
+                  <TopicCloudPanel />
                 </div>
               </div>
 
-              {/* Trending sidebar with smooth collapse animation */}
-              {isReadOnly && (
-                <motion.div
-                  initial={false}
-                  animate={{
-                    width: trendingCollapsed ? 0 : 340,
-                    opacity: trendingCollapsed ? 0 : 1,
-                    paddingLeft: trendingCollapsed ? 0 : 20,
-                    paddingRight: trendingCollapsed ? 0 : 20,
-                  }}
-                  transition={{ duration: 0.3, ease: 'easeInOut' }}
-                  className="hidden lg:flex flex-col border-l border-zinc-900 py-5 shrink-0 overflow-hidden"
-                >
-                  {!trendingCollapsed && (
+              {/* Trending sidebar — works in BOTH readonly and readwrite modes */}
+              <motion.div
+                initial={false}
+                animate={{
+                  width: trendingCollapsed ? 0 : 340,
+                  opacity: trendingCollapsed ? 0 : 1,
+                }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                className="hidden lg:flex flex-col border-l border-zinc-900 shrink-0 overflow-hidden"
+              >
+                {!trendingCollapsed && (
+                  <div className="w-[340px] h-full p-5 overflow-hidden flex flex-col">
                     <TrendingPanel onSelectRepo={setRepoStr} token={token} />
-                  )}
-                </motion.div>
-              )}
+                  </div>
+                )}
+              </motion.div>
             </motion.div>
           ) : null}
         </AnimatePresence>
