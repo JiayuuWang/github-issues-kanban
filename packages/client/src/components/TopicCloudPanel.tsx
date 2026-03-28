@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Cloud, RefreshCw, ExternalLink, MessageSquare, TrendingUp } from 'lucide-react';
+import { Cloud, RefreshCw, ExternalLink, MessageSquare, TrendingUp, Search } from 'lucide-react';
 
 interface Topic {
   word: string;
@@ -15,19 +15,6 @@ interface TopicCloudData {
 }
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
-
-const TOPIC_COLORS = [
-  { bg: '#164e63', text: '#22d3ee' }, // cyan
-  { bg: '#581c87', text: '#a78bfa' }, // purple
-  { bg: '#831843', text: '#f472b6' }, // pink
-  { bg: '#78350f', text: '#fbbf24' }, // amber
-  { bg: '#14532d', text: '#34d399' }, // green
-  { bg: '#1e3a5f', text: '#60a5fa' }, // blue
-  { bg: '#4c1d95', text: '#818cf8' }, // indigo
-  { bg: '#713f12', text: '#fb923c' }, // orange
-  { bg: '#134e4a', text: '#2dd4bf' }, // teal
-  { bg: '#7f1d1d', text: '#fca5a5' }, // red
-];
 
 interface TopicCloudPanelProps {
   className?: string;
@@ -79,7 +66,7 @@ export function TopicCloudPanel({ className = '' }: TopicCloudPanelProps) {
       {/* Accent line */}
       <div className="h-px w-full mb-3 bg-cyan-700 opacity-30" />
 
-      {/* Content — scrollable card list */}
+      {/* Content */}
       <div className="flex-1 flex flex-col gap-2 overflow-y-auto overflow-x-hidden px-0.5 py-1">
         {isLoading ? (
           Array.from({ length: 6 }).map((_, i) => (
@@ -96,9 +83,8 @@ export function TopicCloudPanel({ className = '' }: TopicCloudPanelProps) {
         ) : (
           <>
             {data.topics.map((topic, i) => (
-              <TopicCard key={topic.word} topic={topic} index={i} />
+              <TopicCard key={topic.word} topic={topic} rank={i + 1} />
             ))}
-            {/* Footer */}
             <div className="flex items-center justify-between px-2 py-1.5 mt-1">
               <span className="text-[9px] font-mono text-zinc-700">
                 {data.total_stories} stories analyzed
@@ -120,31 +106,40 @@ export function TopicCloudPanel({ className = '' }: TopicCloudPanelProps) {
   );
 }
 
-function TopicCard({ topic, index }: { topic: Topic; index: number }) {
-  const colors = TOPIC_COLORS[index % TOPIC_COLORS.length];
+function TopicCard({ topic, rank }: { topic: Topic; rank: number }) {
   const [expanded, setExpanded] = useState(false);
+  const hnSearchUrl = `https://hn.algolia.com/?q=${encodeURIComponent(topic.word)}`;
 
   return (
     <div
-      className="group flex flex-col rounded-sm bg-zinc-900 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/80 transition-colors duration-150 cursor-pointer"
-      onClick={() => setExpanded((e) => !e)}
+      className="group flex flex-col rounded-sm bg-zinc-900 border border-zinc-800 hover:border-zinc-600 hover:bg-zinc-800/80 transition-colors duration-150"
     >
       {/* Main row */}
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
-        {/* Color indicator */}
-        <div
-          className="w-7 h-7 rounded-sm flex items-center justify-center shrink-0"
-          style={{ backgroundColor: colors.bg }}
-        >
-          <span className="text-[10px] font-mono font-bold" style={{ color: colors.text }}>
-            {topic.count}
-          </span>
-        </div>
+      <div
+        className="flex items-center gap-2.5 px-3 py-2.5 cursor-pointer"
+        onClick={() => setExpanded((e) => !e)}
+      >
+        {/* Rank number */}
+        <span className="text-[10px] font-mono text-zinc-600 w-4 text-right shrink-0 tabular-nums">
+          {rank}
+        </span>
 
         <div className="flex-1 min-w-0">
-          <span className="text-[11px] font-mono font-medium text-zinc-200 group-hover:text-white transition-colors">
-            {topic.word}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-mono font-medium text-zinc-200 group-hover:text-white transition-colors">
+              {topic.word}
+            </span>
+            <a
+              href={hnSearchUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-zinc-600 hover:text-zinc-300"
+              title="Search on HN"
+            >
+              <Search className="w-3 h-3" />
+            </a>
+          </div>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="flex items-center gap-1 text-[10px] font-mono text-zinc-600">
               <TrendingUp className="w-2.5 h-2.5" />
@@ -158,13 +153,20 @@ function TopicCard({ topic, index }: { topic: Topic; index: number }) {
         </div>
       </div>
 
-      {/* Expanded: sample titles */}
+      {/* Expanded: sample titles with links */}
       {expanded && topic.sample_titles.length > 0 && (
-        <div className="px-3 pb-2.5 border-t border-zinc-800/60">
+        <div className="px-3 pb-2.5 border-t border-zinc-800/60 ml-6">
           {topic.sample_titles.map((title, i) => (
-            <p key={i} className="text-[10px] text-zinc-500 leading-relaxed mt-1.5 truncate">
-              {title}
-            </p>
+            <a
+              key={i}
+              href={`https://hn.algolia.com/?q=${encodeURIComponent(title.slice(0, 60))}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-start gap-1.5 text-[10px] text-zinc-500 hover:text-zinc-300 leading-relaxed mt-1.5 transition-colors"
+            >
+              <ExternalLink className="w-2.5 h-2.5 shrink-0 mt-0.5 text-zinc-700" />
+              <span className="truncate">{title}</span>
+            </a>
           ))}
         </div>
       )}

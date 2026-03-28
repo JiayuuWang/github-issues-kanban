@@ -154,20 +154,38 @@ export function TreemapView({ issues, trendingRepos, topics, onSelectRepo }: Tre
   const isPanning = useRef(false);
   const panStart = useRef({ x: 0, y: 0 });
 
-  // Measure container
+  // Measure container — retry until we get real dimensions
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setDims({ w: rect.width, h: rect.height });
+      if (rect.width > 10 && rect.height > 10) {
+        setDims({ w: Math.floor(rect.width), h: Math.floor(rect.height) });
+      } else {
+        // Element not laid out yet, retry
+        retryTimer = setTimeout(measure, 50);
       }
     };
-    measure();
-    const ro = new ResizeObserver(measure);
+
+    // Initial measure with a small delay to let the DOM settle
+    retryTimer = setTimeout(measure, 30);
+
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 10 && height > 10) {
+        setDims({ w: Math.floor(width), h: Math.floor(height) });
+      }
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+
+    return () => {
+      ro.disconnect();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
   // Mouse wheel zoom
@@ -374,65 +392,67 @@ export function TreemapView({ issues, trendingRepos, topics, onSelectRepo }: Tre
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        <div
-          style={{
-            transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
-            transformOrigin: 'top left',
-            width: dims.w || '100%',
-            height: dims.h || '100%',
-            position: 'absolute',
-            top: 0,
-            left: 0,
-          }}
-        >
-          {nodes.map(node => {
-            const isHovered = hoveredId === node.id;
-            const showSub = node.w > 70 && node.h > 36;
-            const showLabel = node.w > 30 && node.h > 20;
+        {dims.w > 10 && dims.h > 10 && (
+          <div
+            style={{
+              transform: `translate(${translate.x}px, ${translate.y}px) scale(${scale})`,
+              transformOrigin: 'top left',
+              width: dims.w,
+              height: dims.h,
+              position: 'absolute',
+              top: 0,
+              left: 0,
+            }}
+          >
+            {nodes.map(node => {
+              const isHovered = hoveredId === node.id;
+              const showSub = node.w > 70 && node.h > 36;
+              const showLabel = node.w > 30 && node.h > 20;
 
-            return (
-              <div
-                key={node.id}
-                className="absolute transition-colors duration-100"
-                style={{
-                  left: node.x,
-                  top: node.y,
-                  width: node.w,
-                  height: node.h,
-                  backgroundColor: isHovered ? node.hoverColor : node.color,
-                  border: '1px solid rgba(0,0,0,0.5)',
-                  borderRadius: 2,
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={() => setHoveredId(node.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                onClick={(e) => { e.stopPropagation(); handleClick(node); }}
-              >
-                {showLabel && (
-                  <div className="absolute inset-0 p-1.5 overflow-hidden flex flex-col justify-center">
-                    <p
-                      className="font-mono font-semibold text-white/90 truncate leading-tight"
-                      style={{ fontSize: Math.max(9, Math.min(16, node.w / 8)) }}
-                    >
-                      {node.label}
-                    </p>
-                    {showSub && node.subLabel && (
+              return (
+                <div
+                  key={node.id}
+                  className="absolute transition-colors duration-100"
+                  style={{
+                    left: node.x,
+                    top: node.y,
+                    width: node.w,
+                    height: node.h,
+                    backgroundColor: isHovered ? node.hoverColor : node.color,
+                    border: '1px solid rgba(0,0,0,0.5)',
+                    borderRadius: 2,
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={() => setHoveredId(node.id)}
+                  onMouseLeave={() => setHoveredId(null)}
+                  onClick={(e) => { e.stopPropagation(); handleClick(node); }}
+                >
+                  {showLabel && (
+                    <div className="absolute inset-0 p-1.5 overflow-hidden flex flex-col justify-center">
                       <p
-                        className="font-mono text-white/50 truncate leading-tight mt-0.5"
-                        style={{ fontSize: Math.max(8, Math.min(12, node.w / 12)) }}
+                        className="font-mono font-semibold text-white/90 truncate leading-tight"
+                        style={{ fontSize: Math.max(9, Math.min(16, node.w / 8)) }}
                       >
-                        {node.subLabel}
+                        {node.label}
                       </p>
-                    )}
-                  </div>
-                )}
-                {isHovered && node.url && (
-                  <ExternalLink className="absolute top-1 right-1 w-3 h-3 text-white/60" />
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      {showSub && node.subLabel && (
+                        <p
+                          className="font-mono text-white/50 truncate leading-tight mt-0.5"
+                          style={{ fontSize: Math.max(8, Math.min(12, node.w / 12)) }}
+                        >
+                          {node.subLabel}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {isHovered && node.url && (
+                    <ExternalLink className="absolute top-1 right-1 w-3 h-3 text-white/60" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {dims.w === 0 && (
           <div className="absolute inset-0 flex items-center justify-center">
