@@ -95,7 +95,7 @@ export function BoardPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Fetch trending + topics for treemap mode
+  // Fetch trending + topics for treemap / column panels
   useEffect(() => {
     const fetchExtra = async () => {
       try {
