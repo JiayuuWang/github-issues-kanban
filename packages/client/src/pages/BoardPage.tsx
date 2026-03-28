@@ -393,7 +393,7 @@ export function BoardPage() {
             /* --- Board: Column Mode vs Treemap Mode --- */
             viewMode === 'treemap' ? (
               <motion.div key="treemap" initial={{ opacity: 1 }} animate={{ opacity: 1 }}
-                className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+                className="flex-1 relative overflow-hidden">
                 <TreemapView
                   issues={issues}
                   trendingRepos={trendingRepos}

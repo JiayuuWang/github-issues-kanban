@@ -340,7 +340,7 @@ export function TreemapView({ issues, trendingRepos, topics, onSelectRepo }: Tre
   const hoveredNode = hoveredId ? nodes.find(n => n.id === hoveredId) : null;
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
+    <div className="flex flex-col h-full w-full overflow-hidden" style={{ position: 'absolute', inset: 0 }}>
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-zinc-800/40">
         {drillCategory && (
