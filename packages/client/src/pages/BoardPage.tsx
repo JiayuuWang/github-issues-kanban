@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Github, RefreshCw, AlertCircle, GitBranch, Lock, LockOpen, LogOut, ChevronDown, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { Github, RefreshCw, AlertCircle, GitBranch, Lock, LockOpen, LogOut, ChevronDown, LayoutList, LayoutGrid } from 'lucide-react';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { type GitHubIssue } from '@workspace/api-client-react';
 import { useRepoPersistence } from '@/hooks/use-repo-persistence';
 import { useGitHubAuth, type GitHubRepo } from '@/hooks/use-github-auth';
@@ -8,12 +9,15 @@ import { RateLimitBadge } from '@/components/RateLimitBadge';
 import { Board, type BoardMode } from '@/components/kanban/Board';
 import { TrendingPanel } from '@/components/TrendingPanel';
 import { TopicCloudPanel } from '@/components/TopicCloudPanel';
+import { TreemapView } from '@/components/TreemapView';
 import { GitHubAuthModal } from '@/components/GitHubAuthModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 const PER_PAGE = 30;
-const TRENDING_COLLAPSED_KEY = 'kanban_trending_collapsed';
+const VIEW_MODE_KEY = 'kanban_view_mode';
+
+type ViewMode = 'columns' | 'treemap';
 
 function apiUrl(path: string) {
   return `${BASE_URL}${path}`;
@@ -32,6 +36,18 @@ interface RepoInfo {
   owner_login: string;
 }
 
+// Resize handle component
+function ResizeHandle({ className = '' }: { className?: string }) {
+  return (
+    <PanelResizeHandle className={`group relative flex items-center justify-center ${className}`}>
+      <div className="w-px h-full bg-zinc-800 group-hover:bg-zinc-600 group-active:bg-zinc-500 transition-colors" />
+      <div className="absolute w-3 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="w-0.5 h-6 rounded-full bg-zinc-600 group-active:bg-zinc-400" />
+      </div>
+    </PanelResizeHandle>
+  );
+}
+
 export function BoardPage() {
   const { repoStr, setRepoStr, owner, repo, isValid } = useRepoPersistence();
   const { token, user, userRepos, isValidating, error: authError, login, logout } = useGitHubAuth();
@@ -40,15 +56,14 @@ export function BoardPage() {
   const [showReposDropdown, setShowReposDropdown] = useState(false);
   const reposDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Trending panel collapse state (persisted)
-  const [trendingCollapsed, setTrendingCollapsed] = useState(() => {
-    try { return localStorage.getItem(TRENDING_COLLAPSED_KEY) === 'true'; } catch { return false; }
+  // View mode
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try { return (localStorage.getItem(VIEW_MODE_KEY) as ViewMode) || 'columns'; } catch { return 'columns'; }
   });
 
-  const toggleTrending = () => {
-    const next = !trendingCollapsed;
-    setTrendingCollapsed(next);
-    try { localStorage.setItem(TRENDING_COLLAPSED_KEY, String(next)); } catch {}
+  const setAndSaveViewMode = (m: ViewMode) => {
+    setViewMode(m);
+    try { localStorage.setItem(VIEW_MODE_KEY, m); } catch {}
   };
 
   // Issue loading state
@@ -63,6 +78,10 @@ export function BoardPage() {
   const [mode, setMode] = useState<BoardMode>('readonly');
   const [totalFromGitHub, setTotalFromGitHub] = useState<number | undefined>(undefined);
 
+  // Treemap data
+  const [trendingRepos, setTrendingRepos] = useState<any[]>([]);
+  const [topicData, setTopicData] = useState<any[]>([]);
+
   const abortRef = useRef<AbortController | null>(null);
 
   // Close dropdown on outside click
@@ -75,6 +94,22 @@ export function BoardPage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Fetch trending + topics for treemap mode
+  useEffect(() => {
+    if (!isValid) return;
+    const fetchExtra = async () => {
+      try {
+        const [tRes, hRes] = await Promise.all([
+          fetch(`${BASE_URL}/api/github/trending?since=daily`),
+          fetch(`${BASE_URL}/api/hn/topic-cloud`),
+        ]);
+        if (tRes.ok) { const d = await tRes.json(); setTrendingRepos(d); }
+        if (hRes.ok) { const d = await hRes.json(); setTopicData(d.topics || []); }
+      } catch { /* silent */ }
+    };
+    fetchExtra();
+  }, [isValid]);
 
   const fetchPage = useCallback(async (pg: number, append: boolean, signal: AbortSignal) => {
     if (!owner || !repo) return;
@@ -102,8 +137,7 @@ export function BoardPage() {
     if (!owner || !repo) return;
     try {
       const res = await fetch(apiUrl(`/api/github/repo-info?owner=${owner}&repo=${repo}`), {
-        signal,
-        headers: buildHeaders(token),
+        signal, headers: buildHeaders(token),
       });
       if (signal.aborted || !res.ok) return;
       const info = await res.json() as RepoInfo;
@@ -160,7 +194,6 @@ export function BoardPage() {
   const isRateLimitError = loadError?.status === 429;
   const isNotFoundError = loadError?.status === 404;
   const showBoard = isValid && !isLoading && !loadError;
-  const showTrendingSidebar = !trendingCollapsed;
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-[#111] text-zinc-200">
@@ -190,15 +223,32 @@ export function BoardPage() {
 
           <RateLimitBadge />
 
-          {/* Trending toggle — visible whenever board is shown */}
+          {/* View mode toggle */}
           {showBoard && (
-            <button
-              onClick={toggleTrending}
-              className="hidden lg:flex w-7 h-7 items-center justify-center rounded-sm border border-zinc-800 hover:border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
-              title={trendingCollapsed ? 'Show trending panel' : 'Hide trending panel'}
-            >
-              {trendingCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
-            </button>
+            <div className="hidden sm:flex items-center border border-zinc-800 rounded-sm overflow-hidden">
+              <button
+                onClick={() => setAndSaveViewMode('columns')}
+                className={`w-7 h-7 flex items-center justify-center transition-colors ${
+                  viewMode === 'columns'
+                    ? 'bg-zinc-800 text-zinc-200'
+                    : 'text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900'
+                }`}
+                title="Column view"
+              >
+                <LayoutList className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setAndSaveViewMode('treemap')}
+                className={`w-7 h-7 flex items-center justify-center transition-colors ${
+                  viewMode === 'treemap'
+                    ? 'bg-zinc-800 text-zinc-200'
+                    : 'text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900'
+                }`}
+                title="Treemap view"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+            </div>
           )}
 
           <button
@@ -222,7 +272,6 @@ export function BoardPage() {
                   <span className="hidden sm:inline">{user.login}</span>
                   <ChevronDown className={`w-3 h-3 transition-transform ${showReposDropdown ? 'rotate-180' : ''}`} />
                 </button>
-
                 <AnimatePresence>
                   {showReposDropdown && (
                     <motion.div
@@ -251,9 +300,7 @@ export function BoardPage() {
                                   {r.private && <span className="text-[9px] font-mono text-zinc-600 border border-zinc-700 rounded px-1">private</span>}
                                   {r.permissions.push && <span className="text-[9px] font-mono text-emerald-700 border border-emerald-900 rounded px-1">write</span>}
                                 </div>
-                                {r.description && (
-                                  <p className="text-[10px] text-zinc-600 truncate mt-0.5">{r.description}</p>
-                                )}
+                                {r.description && <p className="text-[10px] text-zinc-600 truncate mt-0.5">{r.description}</p>}
                               </div>
                               <span className="text-[10px] font-mono text-zinc-700 shrink-0 mt-0.5">{r.open_issues_count} issues</span>
                             </button>
@@ -265,8 +312,7 @@ export function BoardPage() {
                           onClick={() => { logout(); setShowReposDropdown(false); }}
                           className="w-full flex items-center gap-2 px-2 py-1.5 text-[11px] font-mono text-zinc-600 hover:text-red-400 hover:bg-zinc-900 rounded-sm transition-colors"
                         >
-                          <LogOut className="w-3 h-3" />
-                          Sign out
+                          <LogOut className="w-3 h-3" /> Sign out
                         </button>
                       </div>
                     </motion.div>
@@ -290,41 +336,33 @@ export function BoardPage() {
       <main className="flex-1 w-full overflow-hidden flex flex-col">
         <AnimatePresence mode="wait">
           {!isValid ? (
-            <motion.div
-              key="empty"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex-1 flex overflow-hidden"
-            >
-              {/* Left: hero */}
+            /* --- Empty state --- */
+            <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex-1 flex overflow-hidden">
               <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
                 <Github className="w-8 h-8 text-zinc-700 mb-4" />
                 <h2 className="text-sm font-mono font-medium text-zinc-400 mb-2">Connect a repository</h2>
                 <p className="text-xs font-mono text-zinc-600 max-w-xs mb-6">
-                  Enter a GitHub repository in the format{' '}
-                  <span className="text-zinc-400">owner/repo</span> above to load its issues.
+                  Enter a GitHub repository in the format <span className="text-zinc-400">owner/repo</span> above to load its issues.
                 </p>
                 {!user && (
                   <button
                     onClick={() => setShowAuthModal(true)}
                     className="mb-8 flex items-center gap-2 px-4 py-2 rounded-sm border border-zinc-700 hover:border-zinc-500 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition-colors text-xs font-mono"
                   >
-                    <Github className="w-3.5 h-3.5" />
-                    Sign in to browse your repositories
+                    <Github className="w-3.5 h-3.5" /> Sign in to browse your repositories
                   </button>
                 )}
-                {/* Topic cloud on empty state */}
                 <div className="w-full max-w-lg border border-zinc-800/60 rounded-sm bg-zinc-900/30">
                   <TopicCloudPanel />
                 </div>
               </div>
-              {/* Right: trending */}
               <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[340px] shrink-0 overflow-hidden">
-                <TrendingPanel onSelectRepo={setRepoStr} token={token} />
+                <TrendingPanel onSelectRepo={setRepoStr} />
               </div>
             </motion.div>
           ) : isLoading ? (
+            /* --- Loading skeleton --- */
             <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex-1 flex overflow-hidden">
               <div className="flex-1 p-5 flex gap-4">
@@ -332,95 +370,83 @@ export function BoardPage() {
                   <div key={i} className="flex-1 min-w-[280px] max-w-[340px]">
                     <div className="h-8 w-24 rounded-sm bg-zinc-900 animate-pulse mb-3" />
                     <div className="h-px bg-zinc-800 mb-3" />
-                    <div className="space-y-2">
-                      {[1, 2, 3].map((j) => (
-                        <div key={j} className="h-[130px] rounded-sm bg-zinc-900 animate-pulse" />
-                      ))}
-                    </div>
+                    <div className="space-y-2">{[1, 2, 3].map((j) => <div key={j} className="h-[130px] rounded-sm bg-zinc-900 animate-pulse" />)}</div>
                   </div>
                 ))}
               </div>
-              <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[340px] shrink-0">
-                <div className="h-6 w-24 rounded-sm bg-zinc-900 animate-pulse mb-3" />
-                <div className="space-y-2 mt-3">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div key={i} className="h-20 rounded-sm bg-zinc-900 animate-pulse" />
-                  ))}
-                </div>
-              </div>
             </motion.div>
           ) : loadError ? (
+            /* --- Error state --- */
             <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex-1 flex items-center justify-center p-6">
               <div className="bg-zinc-900 border border-zinc-800 rounded-sm p-8 max-w-md text-center">
                 <AlertCircle className="w-8 h-8 text-red-500/70 mx-auto mb-4" />
                 <h3 className="text-sm font-mono font-medium text-zinc-300 mb-2">Failed to load issues</h3>
                 <p className="text-xs font-mono text-zinc-500 mb-5">
-                  {isRateLimitError ? 'GitHub API rate limit exceeded. Please wait for it to reset.'
-                    : isNotFoundError ? `Repository "${owner}/${repo}" not found or not accessible.`
-                    : loadError.message}
+                  {isRateLimitError ? 'GitHub API rate limit exceeded.' : isNotFoundError ? `Repository "${owner}/${repo}" not found.` : loadError.message}
                 </p>
-                <button onClick={handleRefresh}
-                  className="px-4 py-2 rounded-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-mono text-zinc-300 hover:text-zinc-100 transition-colors">
+                <button onClick={handleRefresh} className="px-4 py-2 rounded-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-mono text-zinc-300 hover:text-zinc-100 transition-colors">
                   Try again
                 </button>
               </div>
             </motion.div>
           ) : showBoard ? (
-            <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-              className="flex-1 overflow-hidden flex">
-              {/* Board + Topic Cloud area */}
-              <div className="flex-1 overflow-hidden flex flex-col min-w-0">
-                {/* Board */}
-                <div className={`flex-1 overflow-hidden p-5 pb-0 flex flex-col min-w-0 transition-all duration-300 ${
-                  !showTrendingSidebar ? 'items-center' : ''
-                }`}>
-                  <div className={`w-full h-full transition-all duration-300 ${
-                    !showTrendingSidebar ? 'max-w-5xl mx-auto' : ''
-                  }`}>
-                    <Board
-                      repoKey={repoStr}
-                      issues={issues}
-                      owner={owner}
-                      repo={repo}
-                      mode={mode}
-                      token={token}
-                      totalFromGitHub={totalFromGitHub}
-                      onLoadMore={handleLoadMore}
-                      isLoadingMore={isLoadingMore}
-                      expanded={trendingCollapsed}
-                    />
-                  </div>
-                </div>
-
-                {/* Topic Cloud — sits below the board */}
-                <div className="shrink-0 mx-5 mb-3 border border-zinc-800/60 rounded-sm bg-zinc-900/20">
-                  <TopicCloudPanel />
-                </div>
-              </div>
-
-              {/* Trending sidebar — works in BOTH readonly and readwrite modes */}
-              <motion.div
-                initial={false}
-                animate={{
-                  width: trendingCollapsed ? 0 : 340,
-                  opacity: trendingCollapsed ? 0 : 1,
-                }}
-                transition={{ duration: 0.3, ease: 'easeInOut' }}
-                className="hidden lg:flex flex-col border-l border-zinc-900 shrink-0 overflow-hidden"
-              >
-                {!trendingCollapsed && (
-                  <div className="w-[340px] h-full p-5 overflow-hidden flex flex-col">
-                    <TrendingPanel onSelectRepo={setRepoStr} token={token} />
-                  </div>
-                )}
+            /* --- Board: Column Mode vs Treemap Mode --- */
+            viewMode === 'treemap' ? (
+              <motion.div key="treemap" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="flex-1 overflow-hidden">
+                <TreemapView
+                  issues={issues}
+                  trendingRepos={trendingRepos}
+                  topics={topicData}
+                  onSelectRepo={setRepoStr}
+                />
               </motion.div>
-            </motion.div>
+            ) : (
+              <motion.div key="columns" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                className="flex-1 overflow-hidden">
+                <PanelGroup direction="horizontal" className="h-full">
+                  {/* Issues Panel */}
+                  <Panel defaultSize={50} minSize={25}>
+                    <div className="h-full overflow-hidden p-4 flex flex-col">
+                      <Board
+                        repoKey={repoStr}
+                        issues={issues}
+                        owner={owner}
+                        repo={repo}
+                        mode={mode}
+                        token={token}
+                        totalFromGitHub={totalFromGitHub}
+                        onLoadMore={handleLoadMore}
+                        isLoadingMore={isLoadingMore}
+                      />
+                    </div>
+                  </Panel>
+
+                  <ResizeHandle />
+
+                  {/* Topics Panel */}
+                  <Panel defaultSize={22} minSize={12} collapsible>
+                    <div className="h-full overflow-hidden border-zinc-900 flex flex-col">
+                      <TopicCloudPanel />
+                    </div>
+                  </Panel>
+
+                  <ResizeHandle />
+
+                  {/* Trending Panel */}
+                  <Panel defaultSize={28} minSize={15} collapsible>
+                    <div className="h-full overflow-hidden p-4 flex flex-col">
+                      <TrendingPanel onSelectRepo={setRepoStr} />
+                    </div>
+                  </Panel>
+                </PanelGroup>
+              </motion.div>
+            )
           ) : null}
         </AnimatePresence>
       </main>
 
-      {/* GitHub Auth Modal */}
       {showAuthModal && (
         <GitHubAuthModal
           onClose={() => setShowAuthModal(false)}

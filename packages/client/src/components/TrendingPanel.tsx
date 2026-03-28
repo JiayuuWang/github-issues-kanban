@@ -49,10 +49,9 @@ function formatNumber(n: number): string {
 
 interface TrendingPanelProps {
   onSelectRepo?: (fullName: string) => void;
-  token?: string | null;
 }
 
-export function TrendingPanel({ onSelectRepo, token }: TrendingPanelProps) {
+export function TrendingPanel({ onSelectRepo }: TrendingPanelProps) {
   const [period, setPeriod] = useState<Period>('daily');
   const [tab, setTab] = useState<Tab>('repos');
   const [repos, setRepos] = useState<TrendingRepo[]>([]);
