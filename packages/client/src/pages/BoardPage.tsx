@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Github, RefreshCw, AlertCircle, GitBranch, Lock, LockOpen, LogOut, ChevronDown } from 'lucide-react';
+import { Github, RefreshCw, AlertCircle, GitBranch, Lock, LockOpen, LogOut, ChevronDown, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { type GitHubIssue } from '@workspace/api-client-react';
 import { useRepoPersistence } from '@/hooks/use-repo-persistence';
 import { useGitHubAuth, type GitHubRepo } from '@/hooks/use-github-auth';
@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const BASE_URL = import.meta.env.BASE_URL?.replace(/\/$/, '') || '';
 const PER_PAGE = 30;
+const TRENDING_COLLAPSED_KEY = 'kanban_trending_collapsed';
 
 function apiUrl(path: string) {
   return `${BASE_URL}${path}`;
@@ -37,6 +38,17 @@ export function BoardPage() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showReposDropdown, setShowReposDropdown] = useState(false);
   const reposDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Trending panel collapse state (persisted)
+  const [trendingCollapsed, setTrendingCollapsed] = useState(() => {
+    try { return localStorage.getItem(TRENDING_COLLAPSED_KEY) === 'true'; } catch { return false; }
+  });
+
+  const toggleTrending = () => {
+    const next = !trendingCollapsed;
+    setTrendingCollapsed(next);
+    try { localStorage.setItem(TRENDING_COLLAPSED_KEY, String(next)); } catch {}
+  };
 
   // Issue loading state
   const [issues, setIssues] = useState<GitHubIssue[]>([]);
@@ -151,6 +163,9 @@ export function BoardPage() {
   const showBoard = isValid && !isLoading && !loadError;
   const isReadOnly = mode === 'readonly';
 
+  // Show trending panel: on empty state always, on board state only in readonly mode
+  const showTrendingSidebar = isReadOnly && !trendingCollapsed;
+
   return (
     <div className="min-h-screen w-full flex flex-col bg-[#111] text-zinc-200">
       {/* Top Bar */}
@@ -182,6 +197,17 @@ export function BoardPage() {
           )}
 
           <RateLimitBadge />
+
+          {/* Trending toggle — only visible when board is shown in readonly */}
+          {showBoard && isReadOnly && (
+            <button
+              onClick={toggleTrending}
+              className="hidden lg:flex w-7 h-7 items-center justify-center rounded-sm border border-zinc-800 hover:border-zinc-600 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors"
+              title={trendingCollapsed ? 'Show trending panel' : 'Hide trending panel'}
+            >
+              {trendingCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
+            </button>
+          )}
 
           {/* Refresh */}
           <button
@@ -301,7 +327,7 @@ export function BoardPage() {
                 )}
               </div>
               {/* Right: trending */}
-              <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[320px] shrink-0 overflow-hidden">
+              <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[340px] shrink-0 overflow-hidden">
                 <TrendingPanel onSelectRepo={setRepoStr} token={token} />
               </div>
             </motion.div>
@@ -322,7 +348,7 @@ export function BoardPage() {
                 ))}
               </div>
               {/* Loading trending placeholder */}
-              <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[320px] shrink-0">
+              <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 w-[340px] shrink-0">
                 <div className="h-6 w-24 rounded-sm bg-zinc-900 animate-pulse mb-3" />
                 <div className="space-y-2 mt-3">
                   {[1, 2, 3, 4].map((i) => (
@@ -351,26 +377,45 @@ export function BoardPage() {
           ) : showBoard ? (
             <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="flex-1 overflow-hidden flex">
-              {/* Board area */}
-              <div className="flex-1 overflow-hidden p-5 flex flex-col min-w-0">
-                <Board
-                  repoKey={repoStr}
-                  issues={issues}
-                  owner={owner}
-                  repo={repo}
-                  mode={mode}
-                  token={token}
-                  totalFromGitHub={totalFromGitHub}
-                  onLoadMore={handleLoadMore}
-                  isLoadingMore={isLoadingMore}
-                />
+              {/* Board area — expands to fill when trending is collapsed */}
+              <div className={`overflow-hidden p-5 flex flex-col min-w-0 transition-all duration-300 ${
+                showTrendingSidebar ? 'flex-1' : 'flex-1 items-center'
+              }`}>
+                <div className={`w-full h-full transition-all duration-300 ${
+                  !showTrendingSidebar && isReadOnly ? 'max-w-5xl mx-auto' : ''
+                }`}>
+                  <Board
+                    repoKey={repoStr}
+                    issues={issues}
+                    owner={owner}
+                    repo={repo}
+                    mode={mode}
+                    token={token}
+                    totalFromGitHub={totalFromGitHub}
+                    onLoadMore={handleLoadMore}
+                    isLoadingMore={isLoadingMore}
+                    expanded={isReadOnly && trendingCollapsed}
+                  />
+                </div>
               </div>
 
-              {/* Trending sidebar — fills all remaining space in readonly mode */}
+              {/* Trending sidebar with smooth collapse animation */}
               {isReadOnly && (
-                <div className="hidden lg:flex flex-col border-l border-zinc-900 p-5 flex-1 min-w-[280px] overflow-hidden">
-                  <TrendingPanel onSelectRepo={setRepoStr} token={token} />
-                </div>
+                <motion.div
+                  initial={false}
+                  animate={{
+                    width: trendingCollapsed ? 0 : 340,
+                    opacity: trendingCollapsed ? 0 : 1,
+                    paddingLeft: trendingCollapsed ? 0 : 20,
+                    paddingRight: trendingCollapsed ? 0 : 20,
+                  }}
+                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                  className="hidden lg:flex flex-col border-l border-zinc-900 py-5 shrink-0 overflow-hidden"
+                >
+                  {!trendingCollapsed && (
+                    <TrendingPanel onSelectRepo={setRepoStr} token={token} />
+                  )}
+                </motion.div>
               )}
             </motion.div>
           ) : null}

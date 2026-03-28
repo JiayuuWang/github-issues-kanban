@@ -19,6 +19,7 @@ interface ColumnProps {
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
   syncingIds?: Set<string>;
+  expanded?: boolean;
 }
 
 export function Column({
@@ -33,6 +34,7 @@ export function Column({
   onLoadMore,
   isLoadingMore = false,
   syncingIds,
+  expanded = false,
 }: ColumnProps) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
@@ -57,7 +59,9 @@ export function Column({
   const showMoreBtn = hasMoreLocal || (visibleCount >= issues.length && hasMoreRemote);
 
   return (
-    <div className="flex flex-col h-full min-w-[300px] max-w-[340px] shrink-0 flex-1">
+    <div className={`flex flex-col h-full shrink-0 flex-1 transition-all duration-300 ${
+      expanded ? 'min-w-[360px] max-w-[520px]' : 'min-w-[300px] max-w-[340px]'
+    }`}>
       {/* Column Header */}
       <div className="flex items-center justify-between px-3 py-2.5 mb-2">
         <div className="flex items-center gap-2">

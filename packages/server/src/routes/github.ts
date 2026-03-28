@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import * as cheerio from "cheerio";
 import { GetIssuesQueryParams, GetIssuesResponse, GetRateLimitResponse } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -31,8 +32,11 @@ router.get("/issues", async (req, res) => {
   const { owner, repo, state = "all", per_page = 100, page = 1 } = parseResult.data;
 
   try {
+    // Use Search API to get only real issues (excludes PRs)
+    const stateQualifier = state === "all" ? "" : ` state:${state}`;
+    const q = `repo:${owner}/${repo} is:issue${stateQualifier}`;
     const response = await githubFetch(
-      `/repos/${owner}/${repo}/issues?state=${state}&per_page=${per_page}&page=${page}&sort=updated&direction=desc`,
+      `/search/issues?q=${encodeURIComponent(q)}&sort=updated&order=desc&per_page=${per_page}&page=${page}`,
       req
     );
 
@@ -46,7 +50,7 @@ router.get("/issues", async (req, res) => {
       }
     }
 
-    if (response.status === 404) {
+    if (response.status === 404 || response.status === 422) {
       res.status(404).json({ error: "not_found", message: `Repository ${owner}/${repo} not found or not accessible` });
       return;
     }
@@ -57,9 +61,10 @@ router.get("/issues", async (req, res) => {
       return;
     }
 
-    const rawIssues = await response.json() as any[];
-    const linkHeader = response.headers.get("link") || "";
-    const hasMore = linkHeader.includes('rel="next"');
+    const searchResult = await response.json() as any;
+    const rawIssues = searchResult.items || [];
+    const totalCount = searchResult.total_count || 0;
+    const hasMore = page * per_page < totalCount;
 
     const issues = rawIssues.map((issue: any) => ({
       id: issue.id,
@@ -78,7 +83,7 @@ router.get("/issues", async (req, res) => {
       pull_request: issue.pull_request ?? null,
     }));
 
-    const validated = GetIssuesResponse.parse({ issues, total_count: issues.length, has_more: hasMore });
+    const validated = GetIssuesResponse.parse({ issues, total_count: totalCount, has_more: hasMore });
     res.json(validated);
   } catch (err) {
     req.log.error({ err }, "Failed to fetch GitHub issues");
@@ -263,44 +268,173 @@ router.patch("/issues/update", async (req, res) => {
   }
 });
 
+// --- Scrape real GitHub Trending page ---
+
+const TRENDING_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "Accept": "text/html,application/xhtml+xml",
+  "Accept-Language": "en-US,en;q=0.9",
+};
+
+function parseStarCount(text: string): number {
+  const clean = text.replace(/,/g, "").trim();
+  return parseInt(clean, 10) || 0;
+}
+
 router.get("/trending", async (req, res) => {
-  const period = (req.query.period as string) || "weekly";
+  const since = (req.query.since as string) || "daily";
   const language = (req.query.language as string) || "";
 
-  // Use "pushed" date for trending (shows recently-active popular repos, not just new ones)
-  const days = period === "daily" ? 1 : period === "monthly" ? 30 : 7;
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-  // Stars threshold varies by period — daily needs fewer stars
-  const minStars = period === "daily" ? 5 : period === "weekly" ? 20 : 50;
-  let q = `pushed:>${since} stars:>=${minStars}`;
-  if (language) q += ` language:${language}`;
+  let url = `https://github.com/trending`;
+  if (language) url += `/${encodeURIComponent(language)}`;
+  url += `?since=${since}`;
 
   try {
-    const response = await githubFetch(
-      `/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=15`,
-      req
-    );
+    const response = await fetch(url, { headers: TRENDING_HEADERS });
     if (!response.ok) {
-      res.status(response.status).json({ error: "github_error", message: "Failed to fetch trending" });
+      res.status(response.status).json({ error: "github_error", message: "Failed to fetch GitHub trending page" });
       return;
     }
-    const data = await response.json() as any;
-    res.json(data.items.map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      full_name: r.full_name,
-      description: r.description,
-      stargazers_count: r.stargazers_count,
-      forks_count: r.forks_count,
-      language: r.language,
-      html_url: r.html_url,
-      owner: { login: r.owner.login, avatar_url: r.owner.avatar_url },
-      topics: (r.topics || []).slice(0, 3),
-    })));
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const repos: any[] = [];
+
+    $("article.Box-row").each((_, el) => {
+      const article = $(el);
+
+      // Repository full name (owner/name)
+      const nameLink = article.find("h2 a");
+      const fullNameParts = nameLink.text().trim().replace(/\s+/g, "").split("/");
+      const ownerLogin = fullNameParts[0] || "";
+      const repoName = fullNameParts[1] || "";
+      if (!ownerLogin || !repoName) return;
+      const full_name = `${ownerLogin}/${repoName}`;
+
+      // Description
+      const description = article.find("p").first().text().trim() || null;
+
+      // Language
+      const langEl = article.find('[itemprop="programmingLanguage"]');
+      const language = langEl.text().trim() || null;
+
+      // Stars count (total)
+      const starsLinks = article.find("a.Link--muted");
+      let stargazers_count = 0;
+      let forks_count = 0;
+      starsLinks.each((i, link) => {
+        const href = $(link).attr("href") || "";
+        const count = parseStarCount($(link).text());
+        if (href.endsWith("/stargazers")) {
+          stargazers_count = count;
+        } else if (href.endsWith("/forks")) {
+          forks_count = count;
+        }
+      });
+
+      // Today's stars
+      const todayStarsEl = article.find("span.d-inline-block.float-sm-right");
+      const todayStarsText = todayStarsEl.text().trim();
+      const todayStarsMatch = todayStarsText.match(/([\d,]+)\s+stars?\s+(today|this week|this month)/i);
+      const stars_today = todayStarsMatch ? parseStarCount(todayStarsMatch[1]) : 0;
+      const stars_period = todayStarsMatch ? todayStarsMatch[2] : "today";
+
+      // Avatar
+      const avatarImg = article.find("img[src*='avatars']").first();
+      const avatar_url = avatarImg.attr("src") || `https://github.com/${ownerLogin}.png`;
+
+      // Built by (contributors)
+      const builtBy: { login: string; avatar_url: string }[] = [];
+      article.find('span:contains("Built by")').parent().find("a img, a[data-hovercard-type='user'] img").each((_, img) => {
+        const src = $(img).attr("src") || "";
+        const alt = $(img).attr("alt") || "";
+        const login = alt.startsWith("@") ? alt.slice(1) : alt;
+        if (login) builtBy.push({ login, avatar_url: src });
+      });
+
+      repos.push({
+        id: repos.length + 1,
+        name: repoName,
+        full_name,
+        description,
+        stargazers_count,
+        forks_count,
+        language,
+        html_url: `https://github.com/${full_name}`,
+        owner: { login: ownerLogin, avatar_url },
+        topics: [],
+        stars_today,
+        stars_period,
+        built_by: builtBy.slice(0, 5),
+      });
+    });
+
+    res.json(repos);
   } catch (err) {
-    req.log.error({ err }, "Failed to fetch trending repos");
+    req.log.error({ err }, "Failed to scrape GitHub trending page");
     res.status(500).json({ error: "internal_error", message: "Failed to fetch trending" });
+  }
+});
+
+// --- Trending Developers ---
+
+router.get("/trending-developers", async (req, res) => {
+  const since = (req.query.since as string) || "daily";
+  const language = (req.query.language as string) || "";
+
+  let url = `https://github.com/trending/developers`;
+  if (language) url += `/${encodeURIComponent(language)}`;
+  url += `?since=${since}`;
+
+  try {
+    const response = await fetch(url, { headers: TRENDING_HEADERS });
+    if (!response.ok) {
+      res.status(response.status).json({ error: "github_error", message: "Failed to fetch trending developers page" });
+      return;
+    }
+
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const developers: any[] = [];
+
+    $("article.Box-row").each((_, el) => {
+      const article = $(el);
+
+      // Avatar
+      const avatarImg = article.find("img").first();
+      const avatar_url = avatarImg.attr("src") || "";
+
+      // Username & display name
+      const nameLink = article.find("h1.h3 a");
+      const displayName = nameLink.text().trim();
+      const usernameEl = article.find("p.f4 a");
+      const username = usernameEl.text().trim();
+      if (!username) return;
+
+      // Popular repo
+      const repoArticle = article.find("article");
+      const repoLink = repoArticle.find("h1 a");
+      const popularRepoName = repoLink.text().trim();
+      const popularRepoDesc = repoArticle.find(".f6.color-fg-muted").text().trim();
+
+      developers.push({
+        id: developers.length + 1,
+        username,
+        name: displayName || username,
+        avatar_url,
+        html_url: `https://github.com/${username}`,
+        popular_repo: popularRepoName ? {
+          name: popularRepoName,
+          description: popularRepoDesc || null,
+          html_url: `https://github.com/${username}/${popularRepoName}`,
+        } : null,
+      });
+    });
+
+    res.json(developers);
+  } catch (err) {
+    req.log.error({ err }, "Failed to scrape GitHub trending developers page");
+    res.status(500).json({ error: "internal_error", message: "Failed to fetch trending developers" });
   }
 });
 

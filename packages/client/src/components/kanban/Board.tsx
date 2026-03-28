@@ -37,6 +37,7 @@ interface BoardProps {
   totalFromGitHub?: number;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
+  expanded?: boolean;
 }
 
 type ColumnsState = Record<string, GitHubIssue[]>;
@@ -138,6 +139,7 @@ export function Board({
   totalFromGitHub,
   onLoadMore,
   isLoadingMore,
+  expanded = false,
 }: BoardProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -401,7 +403,9 @@ export function Board({
         onDragOver={isReadOnly ? undefined : handleDragOver}
         onDragEnd={isReadOnly ? undefined : handleDragEnd}
       >
-        <div className="flex gap-4 h-full w-full overflow-x-auto pb-4">
+        <div className={`flex gap-4 h-full w-full overflow-x-auto pb-4 ${
+          expanded ? 'justify-center' : ''
+        }`}>
           {COLUMNS.map((col) => (
             <Column
               key={col.id}
@@ -415,6 +419,7 @@ export function Board({
               onLoadMore={onLoadMore}
               isLoadingMore={isLoadingMore}
               syncingIds={syncingIssues}
+              expanded={expanded}
             />
           ))}
         </div>
